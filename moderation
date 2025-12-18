@@ -1,0 +1,49 @@
+import discord
+from discord.ext import commands
+from discord import app_commands
+from datetime import timedelta
+
+class Moderation(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
+        
+    @app_commands.command(name="delete_msg", description="指定要刪除幾則訊息")
+    @app_commands.checks.has_permissions(manage_messages=True)
+    async def delete_msg(self, interaction: discord.Interaction, amount: int):
+        if amount < 1:
+            await interaction.response.send_message("重新輸入數量", ephemeral=True)
+            return
+
+        await interaction.response.defer(ephemeral=True)
+        deleted = await interaction.channel.purge(limit=amount)
+        await interaction.followup.send(f"已刪除 {len(deleted)} 則訊息", ephemeral=True)
+
+    from datetime import timedelta
+
+    @app_commands.command(name="timeout", description="暫停發言")
+    @app_commands.checks.has_permissions(moderate_members=True)
+    @app_commands.describe(minutes="幾分鐘", reason="原因")
+    async def timeout_member(self, interaction: discord.Interaction, member: discord.Member, minutes: int, reason: str = None):
+        if member == interaction.user:
+            return await interaction.response.send_message("無法禁言自己", ephemeral=True)
+
+        if member.top_role >= interaction.guild.me.top_role:
+            return await interaction.response.send_message("身份組等級不夠", ephemeral=True)
+
+        if minutes > 40320: # 28 days
+            return await interaction.response.send_message("dc 規定不能禁言超過 28 天", ephemeral=True)
+
+        try:
+            duration = timedelta(minutes=minutes)
+            await member.timeout(duration, reason=reason)
+            await interaction.response.send_message(
+                f"⏳ {member.mention} 已經被禁言 {minutes} 分鐘.\n**Reason:** {reason or '原因不明（？）'}", 
+                ephemeral=True
+            )
+        except discord.Forbidden:
+            await interaction.response.send_message("沒權限", ephemeral=True)
+        except Exception as e:
+            await interaction.response.send_message(f"錯誤： {e}", ephemeral=True)
+        
+async def setup(bot):
+    await bot.add_cog(Moderation(bot))
